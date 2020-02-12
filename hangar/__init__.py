@@ -42,7 +42,13 @@ class Hangar():
         """
             Method that returns the hangar camera image at the moment it's called
         """
-        return io.imread(IMG_URL)# cv2.cvtColor(,cv2.COLOR_BGR2RGB)
+        try:
+            img = io.imread(IMG_URL)
+        #return io.imread(IMG_URL)# cv2.cvtColor(,cv2.COLOR_BGR2RGB)
+        except Exception as e:
+            print("error: No image")
+            img =  None
+        return img
 
     def open(self):
         """

@@ -1,3 +1,8 @@
+#!/usr/bin/env python
+
+import os
+import rospy
+from MAV import MAV
 import sys
 import cv2
 from hangar import *
@@ -5,13 +10,17 @@ import time
 from skimage import io
 import skimage
 #rom dronekit import Vehicle
-from MAV import MAV
+
 from PyQt4 import QtGui, QtCore # QtCore to make button do things
+#from takeoff_n_land import run as takeoffnland
 
 
 #thumbnail_url = 'https://openapi.icloseli.com/rest/service/camera/xxxxS_000c43b93fdb/thumbnail/current?size=1920x1080&token=5001423dc99544fc839c88f7f0bd86c8'
 #thumbnail_url = 'https://file-us-ali.closeli.com/d0dc3a80-ebf7-42ef-afc4-c0afc7ed4b66'
 
+
+rospy.init_node("GUI")
+drone = MAV("Shomer")
 
 IMG_SIZE = (924, 520)
 
@@ -21,17 +30,22 @@ class CamThread(QtCore.QThread):
     hangar = Hangar()
 
     def run(self):
-        while True:
-            frame = self.hangar.get_img()
-            im = self.hangar.get_img()
+        import skimage
+        im = self.hangar.get_img()
+        if im == None:
+            pixmap = QtGui.QPixmap(os.getcwd() + '/imgs/no_image.png')
+            pixmap = pixmap.scaled(530, 300)
+        else:
             im = skimage.transform.resize(im, (300, 530))
-
             arr = skimage.img_as_ubyte(im)
             img = QtGui.QImage(arr.data, arr.shape[1], arr.shape[0],
-                         arr.strides[0], QtGui.QImage.Format_RGB888)
-            #pixmap = QtGui.QPixmap.fromImage(img)
-            self.changePixmap.emit(img)
+                        arr.strides[0], QtGui.QImage.Format_RGB888)
+            pixmap = QtGui.QPixmap.fromImage(img)
+        image = QtGui.QLabel(self)
 
+        image.setGeometry(670, 138, 530, 300)
+        image.setPixmap(pixmap)
+        image.show()
 
 class Window(QtGui.QMainWindow):
     def __init__(self):
@@ -83,6 +97,8 @@ class Window(QtGui.QMainWindow):
     def home(self):
         self.setWindowTitle("Hangar Control - " + str(self.hangar.state))
 
+
+
         width = self.frameGeometry().getRect()[2] - self.frameGeometry().getRect()[0]
         height = self.frameGeometry().getRect()[3] - self.frameGeometry().getRect()[1]
 
@@ -90,7 +106,7 @@ class Window(QtGui.QMainWindow):
         self.h_btn = QtGui.QPushButton(self)
         self.h_btn.resize(80, 80)#sizeHint()
         self.h_btn.move(1050, 587)
-        self.h_btn.setStyleSheet("background:gray; font:bold 18px; padding:3px")
+        self.h_btn.setStyleSheet("background:gray; font:bold 18px; padding:3px; ")
         self.h_btn.clicked.connect(self.toggle_hangar)    # What to do when button is clicked
                 # Safety
         # else:
@@ -128,9 +144,12 @@ class Window(QtGui.QMainWindow):
 
         self.batteryProgress = QtGui.QProgressBar(self)
         self.batteryProgress.setGeometry(95, 184, 382, 140)
+        self.batteryProgress.setValue(drone.battery.percentage)
+
         self.btn = QtGui.QPushButton("Charge", self)
         self.btn.move(20, 225)
         self.btn.resize(60, 80)
+
         self.btn.clicked.connect(self.charge_drone)
         self.btn.setStyleSheet("background:gray")
         print(self.style().objectName())
@@ -152,28 +171,30 @@ class Window(QtGui.QMainWindow):
     def show_camera(self):
         import skimage
         im = self.hangar.get_img()
-        im = skimage.transform.resize(im, (300, 530))
-        arr = skimage.img_as_ubyte(im)
-        img = QtGui.QImage(arr.data, arr.shape[1], arr.shape[0],
-                     arr.strides[0], QtGui.QImage.Format_RGB888)
-        pixmap = QtGui.QPixmap.fromImage(img)
+        if im == None:
+            pixmap = QtGui.QPixmap(os.getcwd() + '/imgs/no_image.png')
+            pixmap = pixmap.scaled(530, 300)
+        else:
+            im = skimage.transform.resize(im, (300, 530))
+            arr = skimage.img_as_ubyte(im)
+            img = QtGui.QImage(arr.data, arr.shape[1], arr.shape[0],
+                        arr.strides[0], QtGui.QImage.Format_RGB888)
+            pixmap = QtGui.QPixmap.fromImage(img)
         image = QtGui.QLabel(self)
 
         image.setGeometry(670, 138, 530, 300)
         image.setPixmap(pixmap)
         image.show()
 
-
     def charge_drone(self):
-        self.charge = 18 # sera a porcentagem inicial de carga
+        self.batteryProgress.setValue(drone.battery.percentage)
+        self.batteryProgress.show()
+        ###### Show off #########
+        # while self.charge < 100:
+        #     self.charge += 0.0001
+        #     self.batteryProgress.setValue(self.charge)
+        #     #time.sleep(0.1)
 
-        while self.charge < 100:
-            self.charge += 0.0001
-            self.batteryProgress.setValue(self.charge)
-            #time.sleep(0.1)
-
-        #### for real now ####
-        self.charger
 
 
     def close_application(self):
@@ -231,8 +252,11 @@ class Window(QtGui.QMainWindow):
         choice = QtGui.QMessageBox.question(QtGui.QWidget(), 'Takeoff the drone',
                                             "Are you sure you want to takeoff the drone?",
                                             QtGui.QMessageBox.Yes | QtGui.QMessageBox.No)
+        #choice.setStyleSheet("background: white")
         if choice == QtGui.QMessageBox.Yes:
             print("Takeoff drone")
+            drone.takeoff(3)
+
 
     def land_drone(self):
         choice = QtGui.QMessageBox.question(QtGui.QWidget(), 'Land the drone',
@@ -240,6 +264,8 @@ class Window(QtGui.QMainWindow):
                                             QtGui.QMessageBox.Yes | QtGui.QMessageBox.No)
         if choice == QtGui.QMessageBox.Yes:
             print("Landing drone")
+            drone.precision_landing()
+        
     #################################
 def run():
     app = QtGui.QApplication(sys.argv)
